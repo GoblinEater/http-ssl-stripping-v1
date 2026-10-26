@@ -64,7 +64,7 @@ A few claims are worth confirming against a primary source before relying on the
 
 Per the GECC publishing workflow for standalone tools:
 
-1. Keep this repo under `~/git-projects/http-ssl-stripping/` with its own GitHub remote. Check `git remote -v` before pushing.
+1. Keep this repo under `~/code/goblin-eater/http-ssl-stripping/` with its own GitHub remote. Check `git remote -v` before pushing.
 2. Copy the HTML file to the Hugo static tools directory: `~/ubritsa/static/tools/`.
 3. Run the `publish` step to deploy via Cloudflare Pages.
 
