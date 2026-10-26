@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP Request Flow Visualizer — Goblin Eaters Cyber Cavern</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0e14;
+  --surface: #111520;
+  --surface2: #161b28;
+  --border: #1e2636;
+  --border2: #263040;
+  --text: #c8d4e8;
+  --dim: #6b7f9e;
+  --faint: #3a4a60;
+  --blue: #4a9eff;
+  --blue-dim: #1e3d6e;
+  --green: #3ecf8e;
+  --green-dim: #0e3024;
+  --red: #ff4d6a;
+  --red-dim: #3d0f18;
+  --amber: #ffb340;
+  --amber-dim: #3d2800;
+  --bottom-h: 420px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Base font-size on the root; every type size scales from here in rem. */
+html { font-size: 100%; }
+
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ── */
+.header {
+  height: 3.25rem;
+  flex-shrink: 0;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+}
+
+.header-title {
+  font-family: 'Syne', sans-serif;
+  font-size: .95rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.header-sub {
+  font-size: .58rem;
+  color: var(--dim);
+  margin-top: .1rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.mode-toggle { display: flex; gap: .4rem; }
+
+.mode-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .68rem;
+  padding: .35rem .85rem;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all .2s;
+}
+.mode-btn:hover { color: var(--text); border-color: var(--dim); }
+.mode-btn.active { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.mode-btn.active.atk { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+
+/* ── CANVAS AREA ── */
+.canvas-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(62,207,142,.03) 0%, transparent 50%),
+    radial-gradient(circle at 80% 50%, rgba(74,158,255,.03) 0%, transparent 50%);
+}
+
+canvas { display: block; width: 100%; height: 100%; }
+
+/* ── BOTTOM STRIP ── */
+.bottom {
+  height: var(--bottom-h);
+  flex-shrink: 0;
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+/* ── FRAME DISSECTOR — 65% ── */
+.dissector {
+  width: 65%;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.dissector-header {
+  height: 2rem;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 .9rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+
+.dissector-title {
+  font-size: .72rem;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+
+.dissector-badge {
+  font-size: .68rem;
+  padding: .14rem .5rem;
+  border-radius: 3px;
+  letter-spacing: .06em;
+}
+.dissector-badge.secure  { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+.dissector-badge.exposed { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+.dissector-badge.plain   { background: var(--amber-dim); color: var(--amber); border: 1px solid var(--amber); }
+.dissector-badge.empty   { background: transparent; color: var(--faint); border: 1px solid var(--faint); }
+
+.dissector-body {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+}
+
+.frame-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: .4rem;
+  color: var(--faint);
+}
+.frame-placeholder .ph-icon { font-size: 1.8rem; opacity: .3; }
+.frame-placeholder .ph-text { font-size: .78rem; letter-spacing: .06em; }
+
+.frame-table-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: .3rem .5rem;
+}
+
+table.ft { width: 100%; border-collapse: collapse; font-size: .75rem; }
+
+table.ft th {
+  text-align: left;
+  color: var(--dim);
+  font-size: .66rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: .25rem .5rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+table.ft td {
+  padding: .28rem .5rem;
+  border-bottom: 1px solid #151c28;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+table.ft tr:last-child td { border-bottom: none; }
+
+.ft-section td {
+  font-size: .62rem;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  padding: .28rem .5rem .12rem;
+  background: var(--bg);
+}
+
+.ft-net td { background: rgba(74,158,255,.03); }
+.ft-app td { background: rgba(62,207,142,.03); }
+
+.ft .fn { color: var(--dim); width: 150px; }
+.ft .fv { color: var(--text); white-space: normal; }
+.ft .fv2 { color: var(--green); white-space: normal; }
+
+.ft tr.exposed .fn::before { content: '⚠ '; color: var(--red); }
+.ft tr.exposed .fv { color: var(--red); font-weight: 600; }
+
+.exp-badge {
+  display: inline-block;
+  font-size: .6rem;
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  padding: .04rem .32rem;
+  margin-left: .35rem;
+  vertical-align: middle;
+}
+.hidden-badge {
+  display: inline-block;
+  font-size: .6rem;
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid var(--green);
+  border-radius: 2px;
+  padding: .04rem .32rem;
+  margin-left: .35rem;
+  vertical-align: middle;
+}
+
+.ft-note td {
+  font-size: .68rem;
+  color: var(--amber);
+  padding: .3rem .5rem;
+  border-top: 1px solid var(--border);
+  white-space: normal;
+}
+
+/* ── STEP PANEL — 35% ── */
+.step-panel {
+  width: 35%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.nav-strip {
+  flex-shrink: 0;
+  padding: .55rem .8rem .45rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.step-counter {
+  font-size: .7rem;
+  color: var(--dim);
+  text-align: center;
+  letter-spacing: .05em;
+}
+
+.step-dots { display: flex; gap: .18rem; justify-content: center; }
+
+.dot {
+  flex: 1;
+  max-width: 24px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--faint);
+  transition: background .25s;
+}
+.dot.done     { background: var(--green); }
+.dot.done.atk { background: var(--red); }
+.dot.current  { background: var(--amber); }
+
+.nav-btns { display: flex; gap: .35rem; }
+
+.nbtn {
+  flex: 1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .75rem;
+  padding: .45rem .2rem;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: all .18s;
+  text-align: center;
+}
+.nbtn:hover { border-color: var(--dim); color: var(--green); }
+.nbtn:disabled { opacity: .25; cursor: not-allowed; }
+.nbtn.primary { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+.nbtn.primary:hover { background: rgba(62,207,142,.2); }
+.nbtn.primary.atk { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+
+.auto-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .73rem;
+  padding: .38rem;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all .18s;
+  width: 100%;
+}
+.auto-btn:hover { color: var(--text); border-color: var(--dim); }
+.auto-btn.running { color: var(--amber); border-color: var(--amber); }
+
+.step-explain {
+  flex: 1;
+  padding: .7rem .9rem;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+.step-explain.empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--faint);
+  font-size: .78rem;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.step-lbl {
+  font-size: .67rem;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  margin-bottom: .05rem;
+}
+.step-lbl.normal { color: var(--blue); }
+.step-lbl.attack { color: var(--red); }
+.step-lbl.warn   { color: var(--amber); }
+.step-lbl.good   { color: var(--green); }
+
+.step-msg {
+  font-size: .92rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.step-det {
+  font-size: .78rem;
+  color: var(--dim);
+  line-height: 1.7;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">HTTP Request Flow Visualizer</div>
+    <div class="header-sub">Layer 7 · HTTP / HTTPS · SSL Stripping · Week 10a · Goblin Eaters Cyber Cavern</div>
+  </div>
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btnNormal" onclick="setMode('normal')">HTTPS (Protected)</button>
+    <button class="mode-btn" id="btnAttack" onclick="setMode('attack')">SSL Stripping</button>
+  </div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="c"></canvas>
+</div>
+
+<div class="bottom">
+
+  <!-- FRAME DISSECTOR -->
+  <div class="dissector">
+    <div class="dissector-header">
+      <div class="dissector-title" id="dissTitle">HTTP Message on the Wire</div>
+      <div class="dissector-badge empty" id="dissBadge">No message this step</div>
+    </div>
+    <div class="dissector-body" id="dissBody">
+      <div class="frame-placeholder" id="framePlaceholder">
+        <div class="ph-icon">⬡</div>
+        <div class="ph-text">Message dissector active on request and response steps</div>
+      </div>
+      <div class="frame-table-wrap" id="frameTableWrap" style="display:none">
+        <table class="ft" id="frameTable">
+          <thead>
+            <tr>
+              <th class="fn">Field</th>
+              <th id="thSent">On the Wire</th>
+              <th id="thTruth" style="display:none">Under HTTPS</th>
+            </tr>
+          </thead>
+          <tbody id="frameTbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP PANEL -->
+  <div class="step-panel">
+    <div class="nav-strip">
+      <div class="step-counter" id="stepCounter">Ready - click Next to begin</div>
+      <div class="step-dots" id="stepDots"></div>
+      <div class="nav-btns">
+        <button class="nbtn" id="btnPrev" onclick="prevStep()" disabled>← Prev</button>
+        <button class="nbtn primary" id="btnNext" onclick="nextStep()">Next →</button>
+        <button class="nbtn" onclick="resetAll()">Reset</button>
+      </div>
+      <button class="auto-btn" id="btnAuto" onclick="toggleAuto()">▶ Auto Play</button>
+    </div>
+
+    <div class="step-explain empty" id="stepExplain">
+      Select a mode above and click Next to begin.
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// MESSAGE DATA (dissector)
+// ═══════════════════════════════════════════════════════
+const FRAMES = {
+  reqInitial: {
+    title: 'Initial Request - Plain HTTP',
+    badge: 'plain', badgeText: 'Cleartext',
+    showTruth: false,
+    note: 'The very first request is plain HTTP. The browser does not yet know the site requires HTTPS. This initial cleartext moment is exactly what both the redirect-to-HTTPS pattern and an on-path attacker act on.',
+    sections: [
+      { label: 'TCP / Port', cls: 'ft-net', rows: [
+        { field: 'Destination Port', sent: '80 (HTTP)', note: 'Plain HTTP, no transport encryption' },
+      ]},
+      { label: 'HTTP Request Line + Headers', cls: 'ft-app', rows: [
+        { field: 'Method',  sent: 'GET' },
+        { field: 'Path',    sent: '/' },
+        { field: 'Host',    sent: 'ubritsa.com' },
+        { field: 'Version', sent: 'HTTP/1.1' },
+      ]},
+    ]
+  },
+  redirect301: {
+    title: 'Server Response - Upgrade to HTTPS',
+    badge: 'secure', badgeText: 'Server Upgrades',
+    showTruth: false,
+    note: 'The server answers the plain HTTP request with a redirect to the HTTPS version of the same URL. A server sending HSTS also includes Strict-Transport-Security, which tells the browser to use HTTPS automatically on every future visit.',
+    sections: [
+      { label: 'HTTP Status Line + Headers', cls: 'ft-app', rows: [
+        { field: 'Status',   sent: '301 Moved Permanently' },
+        { field: 'Location', sent: 'https://ubritsa.com/', note: 'Points the browser at the encrypted version' },
+        { field: 'Strict-Transport-Security', sent: 'max-age=63072000', note: 'HSTS. Browser will force HTTPS on future visits.' },
+      ]},
+    ]
+  },
+  tlsHandshake: {
+    title: 'TLS Handshake',
+    badge: 'secure', badgeText: 'Negotiating Encryption',
+    showTruth: false,
+    note: 'ClientHello, ServerHello, certificate, key exchange. After this completes, the channel is encrypted. An observer on the path sees that a TLS session exists and to which server (via SNI), but not the request or response contents.',
+    sections: [
+      { label: 'TCP / Port', cls: 'ft-net', rows: [
+        { field: 'Destination Port', sent: '443 (HTTPS)' },
+      ]},
+      { label: 'TLS Record', cls: 'ft-app', rows: [
+        { field: 'Phase',       sent: 'ClientHello → ServerHello → Certificate → Finished' },
+        { field: 'Visible',     sent: 'Server name (SNI), certificate, timing, sizes' },
+        { field: 'Not Visible', sent: 'The HTTP request and response inside' },
+      ]},
+    ]
+  },
+  securePost: {
+    title: 'Login POST - Inside TLS',
+    badge: 'secure', badgeText: 'Encrypted',
+    showTruth: false,
+    note: 'The credentials travel inside the established TLS session. On the wire they are an opaque encrypted record. An on-path observer sees ciphertext, not the username or password.',
+    sections: [
+      { label: 'TCP / Port', cls: 'ft-net', rows: [
+        { field: 'Destination Port', sent: '443 (HTTPS)' },
+      ]},
+      { label: 'What an observer sees', cls: 'ft-app', rows: [
+        { field: 'TLS Application Data', sent: '17 03 03 00 40  [encrypted record]', note: 'Opaque ciphertext. The POST body is inside, unreadable.' },
+        { field: 'Username', sent: '[encrypted]' },
+        { field: 'Password', sent: '[encrypted]' },
+      ]},
+    ]
+  },
+  strippedResponse: {
+    title: 'Attacker-Rewritten Response',
+    badge: 'exposed', badgeText: 'DOWNGRADED',
+    showTruth: false,
+    note: 'The attacker fetched the real page from the server over HTTPS, then rewrote every https:// link and stripped the redirect before handing the page to the victim over plain HTTP. The victim\'s browser shows a working site and no padlock.',
+    sections: [
+      { label: 'Delivered to Victim over Port 80', cls: 'ft-app', rows: [
+        { field: 'Status', sent: '200 OK' },
+        { field: 'Form action (original)', sent: 'https://ubritsa.com/login', note: 'What the real server sent' },
+        { field: 'Form action (rewritten)', sent: 'http://ubritsa.com/login', note: 'Attacker changed https to http so the submit comes back in cleartext', exposed: true },
+        { field: 'Padlock in browser', sent: 'None - page served over HTTP', exposed: true },
+      ]},
+    ]
+  },
+  strippedPost: {
+    title: 'Login POST - Stripped to Cleartext',
+    badge: 'exposed', badgeText: 'EXPOSED',
+    showTruth: true,
+    note: 'The victim fills in the login form and submits. Because the page was downgraded, the form posts over plain HTTP to the attacker. The credentials are genuine and unmodified. Nothing was falsified. They are simply in the clear. Under HTTPS the same fields would be an opaque encrypted record.',
+    sections: [
+      { label: 'TCP / Port', cls: 'ft-net', rows: [
+        { field: 'Destination Port', sent: '80 (HTTP)', truth: '443 (HTTPS)', exposed: true },
+      ]},
+      { label: 'HTTP Request', cls: 'ft-app', rows: [
+        { field: 'Method', sent: 'POST', truth: 'POST', exposed: false },
+        { field: 'Path',   sent: '/login', truth: '/login', exposed: false },
+        { field: 'Host',   sent: 'ubritsa.com', truth: 'ubritsa.com', exposed: false },
+      ]},
+      { label: 'POST Body', cls: 'ft-app', rows: [
+        { field: 'username', sent: 'G. Eater', truth: '[encrypted]', exposed: true,
+          note: 'Readable by the attacker in plain text' },
+        { field: 'password', sent: 'correct-horse-9', truth: '[encrypted]', exposed: true,
+          note: 'Readable by the attacker in plain text' },
+      ]},
+    ]
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+// STEPS
+// ═══════════════════════════════════════════════════════
+const normalSteps = [
+  {
+    type: 'warn', from: 'victim', to: 'server',
+    packet: { color: '#ffb340', label: 'HTTP' }, frame: 'reqInitial',
+    log: { type: 'warn', lbl: 'Initial Request - Plain HTTP',
+      msg: 'Browser requests http://ubritsa.com before it knows HTTPS is required',
+      det: 'The user typed a bare domain or followed an http link. The first request goes out on port 80 in cleartext. This is the one unprotected moment in an otherwise secure exchange, and it is the moment both the redirect pattern and an attacker care about.' }
+  },
+  {
+    type: 'good', from: 'server', to: 'victim',
+    packet: { color: '#3ecf8e', label: '301' }, frame: 'redirect301',
+    log: { type: 'good', lbl: 'Server Redirects to HTTPS',
+      msg: 'Server answers with 301 to https://ubritsa.com and an HSTS header',
+      det: 'The server refuses to serve content over plain HTTP. It redirects to the encrypted version and, with HSTS, instructs the browser to use HTTPS automatically on every future visit, removing the cleartext first request next time.' }
+  },
+  {
+    type: 'good', from: 'victim', to: 'server',
+    packet: { color: '#3ecf8e', label: 'TLS' }, frame: 'tlsHandshake',
+    log: { type: 'good', lbl: 'TLS Handshake',
+      msg: 'Browser and server negotiate an encrypted channel on port 443',
+      det: 'ClientHello, ServerHello, certificate, key exchange. The browser validates the server certificate against a trusted authority. Once finished, everything inside the session is encrypted. An observer sees that a session exists and the server name, not the contents.' }
+  },
+  {
+    type: 'good', from: 'victim', to: 'server',
+    packet: { color: '#3ecf8e', label: 'POST' }, frame: 'securePost',
+    log: { type: 'good', lbl: 'Credentials Sent - Encrypted',
+      msg: 'The login POST travels inside TLS as opaque ciphertext',
+      det: 'The username and password are inside the encrypted session. On the wire they are an unreadable TLS record. The server receives them, the browser shows the padlock, and no observer on the path could read them.' }
+  },
+];
+
+const attackSteps = [
+  {
+    type: 'attack', from: null, to: null, prep: true,
+    frame: null,
+    log: { type: 'attack', lbl: 'Prerequisite - Attacker Is On Path',
+      msg: 'The attacker already sits between the victim and the server',
+      det: 'SSL stripping is not a remote attack. The attacker must first be on the path, typically by ARP poisoning the local segment, the same mechanism from the Week 2 Layer 2 post, or by running a rogue access point. From here, the victim\'s traffic flows through the attacker.' }
+  },
+  {
+    type: 'attack', from: 'victim', to: 'attacker',
+    packet: { color: '#ff4d6a', label: 'HTTP' }, frame: 'reqInitial',
+    log: { type: 'attack', lbl: 'Initial Request - Intercepted',
+      msg: 'Browser requests http://ubritsa.com. The attacker receives it, not the server.',
+      det: 'The first request is plain HTTP, so there is no certificate and no encryption to get in the way. Because the attacker is on the path, this cleartext request lands on the attacker. The victim does not know anything is wrong. Nothing looks different yet.' }
+  },
+  {
+    type: 'warn', from: 'attacker', to: 'server',
+    packet: { color: '#3ecf8e', label: 'TLS' }, frame: 'tlsHandshake',
+    log: { type: 'warn', lbl: 'Attacker Opens HTTPS to the Real Server',
+      msg: 'The attacker makes a proper HTTPS connection to ubritsa.com',
+      det: 'The attacker speaks real HTTPS to the server. The certificate validates, because the attacker is a legitimate client from the server\'s point of view. The server has no way to know the request originated with a victim rather than the attacker. The attacker-to-server channel is fully encrypted.' }
+  },
+  {
+    type: 'attack', from: 'attacker', to: 'victim',
+    packet: { color: '#ff4d6a', label: 'HTML' }, frame: 'strippedResponse',
+    log: { type: 'attack', lbl: 'Response Downgraded and Rewritten',
+      msg: 'Attacker rewrites every https link to http, then serves the page over plain HTTP',
+      det: 'The attacker takes the real page and strips it: every https:// link and redirect becomes http://. The victim receives a working, familiar-looking page over plain HTTP. The browser shows no padlock, but many users never check, and the content itself looks correct.' }
+  },
+  {
+    type: 'attack', from: 'victim', to: 'attacker',
+    packet: { color: '#ff4d6a', label: 'POST' }, frame: 'strippedPost',
+    log: { type: 'attack', lbl: 'Credentials Submitted in Cleartext',
+      msg: 'The victim logs in. The form posts over HTTP, straight to the attacker.',
+      det: 'Because the page was downgraded, the login form submits over plain HTTP. The credentials are genuine and unaltered. Nothing was falsified. They are simply readable. The attacker captures them, then forwards the login to the real server over HTTPS so the victim sees a normal, successful login.' }
+  },
+  {
+    type: 'good', from: null, to: null,
+    frame: null,
+    log: { type: 'good', lbl: 'Why This Works Less Often Today',
+      msg: 'HSTS, HTTPS-first browsing, and warnings have narrowed the window',
+      det: 'HSTS preloading means the browser refuses plain HTTP for known sites before any request leaves the machine, so there is no cleartext first request to strip. Modern browsers also default to trying HTTPS first and label HTTP pages as not secure. SSL stripping still works against sites without HSTS and users who ignore the warnings, which is why it remains worth understanding.' }
+  },
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let mode = 'normal';
+let steps = normalSteps;
+let currentStep = -1;
+let autoTimer = null;
+let packets = [];
+let replayTimer = null;
+let replaySpec = null;
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const nodes = {
+  victim:   { label: 'Victim',   sub: 'browser',       col: '#4a9eff', rx: .15, ry: .55 },
+  server:   { label: 'Server',   sub: 'ubritsa.com',   col: '#3ecf8e', rx: .85, ry: .55 },
+  attacker: { label: 'Attacker', sub: 'on-path',       col: '#ff4d6a', rx: .5,  ry: .2, hidden: true },
+};
+
+// ═══════════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════════
+function resize() {
+  const wrap = canvas.parentElement;
+  canvas.width = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+
+function gp(key) {
+  const n = nodes[key];
+  return { x: n.rx * canvas.width, y: n.ry * canvas.height };
+}
+
+function drawGrid() {
+  ctx.save();
+  ctx.strokeStyle = '#0e1219';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < canvas.width; x += 40) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y < canvas.height; y += 40) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawLink(ak, bk, active, color, dashed) {
+  const a = gp(ak), b = gp(bk);
+  ctx.save();
+  ctx.strokeStyle = active ? color : '#1a2030';
+  ctx.lineWidth = active ? 2 : 1;
+  if (dashed) ctx.setLineDash([5, 4]);
+  if (active) { ctx.shadowColor = color; ctx.shadowBlur = 10; }
+  ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+  ctx.restore();
+}
+
+// A small lock glyph to mark an encrypted link
+function drawLockOnLink(ak, bk, color) {
+  const a = gp(ak), b = gp(bk);
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(mx - 5, my - 2, 10, 8);
+  ctx.beginPath();
+  ctx.arc(mx, my - 2, 3.2, Math.PI, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// An open padlock / exposed glyph for a cleartext link
+function drawOpenOnLink(ak, bk, color) {
+  const a = gp(ak), b = gp(bk);
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(mx - 5, my - 2, 10, 8);
+  ctx.beginPath();
+  ctx.arc(mx + 4, my - 2, 3.2, Math.PI, Math.PI * 0.1, true);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNode(key) {
+  const n = nodes[key];
+  if (n.hidden && (mode !== 'attack' || currentStep < 0)) return;
+
+  const { x, y } = gp(key);
+  const step = currentStep >= 0 ? steps[currentStep] : null;
+  const active = step && (step.from === key || step.to === key);
+  const r = 26;
+
+  ctx.save();
+  if (active) {
+    const g = ctx.createRadialGradient(x, y, r, x, y, r * 3);
+    g.addColorStop(0, n.col + '30'); g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  if (key === 'server') {
+    // server = stacked rack
+    ctx.fillStyle = '#13182a';
+    ctx.strokeStyle = active ? n.col : '#20304a';
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.beginPath(); ctx.roundRect(x - 20, y - 22, 40, 44, 4); ctx.fill(); ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = active ? n.col : '#2a3a50';
+      ctx.beginPath(); ctx.moveTo(x - 20, y - 10 + i * 12); ctx.lineTo(x + 20, y - 10 + i * 12); ctx.stroke();
+      ctx.fillStyle = active ? n.col : '#2a3a50';
+      ctx.beginPath(); ctx.arc(x - 13, y - 16 + i * 12, 2, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (key === 'attacker') {
+    // attacker = hexagon in red
+    ctx.fillStyle = '#1a1016';
+    ctx.strokeStyle = active ? n.col : '#5a2030';
+    ctx.lineWidth = active ? 2 : 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      const px = x + r * Math.cos(a), py = y + r * Math.sin(a);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = active ? n.col : '#8a3040';
+    ctx.font = `600 16px 'JetBrains Mono'`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('!', x, y);
+    ctx.textBaseline = 'alphabetic';
+  } else {
+    // victim = laptop
+    ctx.fillStyle = '#13182a';
+    ctx.strokeStyle = active ? n.col : '#20304a';
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.beginPath(); ctx.roundRect(x - 20, y - 16, 40, 26, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = active ? n.col : '#2a3a50';
+    ctx.fillRect(x - 26, y + 12, 52, 4);
+  }
+
+  ctx.fillStyle = active ? n.col : '#5a6a80';
+  ctx.font = `600 11px 'JetBrains Mono'`;
+  ctx.textAlign = 'center';
+  ctx.fillText(n.label, x, y + r + 16);
+  ctx.fillStyle = '#3a4a60';
+  ctx.font = `400 9px 'JetBrains Mono'`;
+  ctx.fillText(n.sub, x, y + r + 28);
+  ctx.restore();
+}
+
+function updatePackets() {
+  packets = packets.filter(p => !p.done);
+  packets.forEach(p => { p.t = Math.min(1, p.t + .018); if (p.t >= 1) p.done = true; });
+}
+
+function drawPackets() {
+  packets.forEach(p => {
+    const x = p.fx + (p.tx - p.fx) * p.t;
+    const y = p.fy + (p.ty - p.fy) * p.t;
+    ctx.save();
+    ctx.shadowColor = p.color; ctx.shadowBlur = 14;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.roundRect(x - 16, y - 9, 32, 18, 4); ctx.fill();
+    ctx.fillStyle = '#0b0e14';
+    ctx.font = `bold 8px 'JetBrains Mono'`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.label, x, y);
+    ctx.restore();
+  });
+  ctx.textBaseline = 'alphabetic';
+}
+
+function spawnPacket(fk, tk, color, label, delay) {
+  const f = gp(fk), t = gp(tk);
+  setTimeout(() => packets.push({ fx: f.x, fy: f.y, tx: t.x, ty: t.y, color, label, t: 0, done: false }), delay || 0);
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawGrid();
+
+  const step = currentStep >= 0 ? steps[currentStep] : null;
+  const isAtk = mode === 'attack';
+
+  // base links
+  if (isAtk && currentStep >= 0) {
+    drawLink('victim', 'attacker', false, '', false);
+    drawLink('attacker', 'server', false, '', true);
+  } else {
+    drawLink('victim', 'server', false, '', false);
+  }
+
+  if (step && step.from && step.to) {
+    const ac = step.type === 'attack' ? '#ff4d6a' : step.type === 'warn' ? '#ffb340' : '#3ecf8e';
+    drawLink(step.from, step.to, true, ac, step.to === 'server' && step.from === 'attacker');
+    // encryption glyphs
+    if (step.frame === 'tlsHandshake' || step.frame === 'securePost') {
+      drawLockOnLink(step.from, step.to, '#3ecf8e');
+    }
+    if ((step.frame === 'reqInitial' && isAtk) || step.frame === 'strippedResponse' || step.frame === 'strippedPost') {
+      drawOpenOnLink(step.from, step.to, '#ff4d6a');
+    }
+    if (step.frame === 'reqInitial' && !isAtk) {
+      drawOpenOnLink(step.from, step.to, '#ffb340');
+    }
+  }
+
+  drawPackets();
+  Object.keys(nodes).forEach(k => drawNode(k));
+}
+
+let rafId;
+function loop() { updatePackets(); draw(); rafId = requestAnimationFrame(loop); }
+
+// ═══════════════════════════════════════════════════════
+// DISSECTOR
+// ═══════════════════════════════════════════════════════
+function showFrame(key) {
+  const placeholder = document.getElementById('framePlaceholder');
+  const tableWrap = document.getElementById('frameTableWrap');
+  const badge = document.getElementById('dissBadge');
+  const title = document.getElementById('dissTitle');
+
+  if (!key) {
+    placeholder.style.display = 'flex';
+    tableWrap.style.display = 'none';
+    title.textContent = 'HTTP Message on the Wire';
+    badge.textContent = 'No message this step';
+    badge.className = 'dissector-badge empty';
+    return;
+  }
+
+  const f = FRAMES[key];
+  if (!f) return;
+
+  placeholder.style.display = 'none';
+  tableWrap.style.display = 'block';
+
+  title.textContent = f.title;
+  badge.textContent = f.badgeText;
+  badge.className = 'dissector-badge ' + f.badge;
+
+  document.getElementById('thTruth').style.display = f.showTruth ? '' : 'none';
+  document.getElementById('thSent').textContent = f.showTruth ? 'On the Wire (HTTP)' : 'On the Wire';
+
+  const tbody = document.getElementById('frameTbody');
+  tbody.innerHTML = '';
+
+  f.sections.forEach(sec => {
+    const lr = document.createElement('tr');
+    lr.className = 'ft-section';
+    lr.innerHTML = `<td colspan="3">${sec.label}</td>`;
+    tbody.appendChild(lr);
+
+    sec.rows.forEach(row => {
+      const tr = document.createElement('tr');
+      tr.className = sec.cls + (row.exposed ? ' exposed' : '');
+      const expBadge = row.exposed ? `<span class="exp-badge">EXPOSED</span>` : '';
+      let truthCell = '';
+      if (f.showTruth) {
+        truthCell = row.exposed
+          ? `<td class="fv2">${row.truth}<span class="hidden-badge">HIDDEN</span></td>`
+          : `<td class="fv2" style="color:var(--faint)">${row.truth || '-'}</td>`;
+      }
+      tr.innerHTML = `<td class="fn">${row.field}</td><td class="fv">${row.sent}${expBadge}</td>${truthCell}`;
+      if (row.note) tr.title = row.note;
+      tbody.appendChild(tr);
+    });
+  });
+
+  if (f.note) {
+    const nr = document.createElement('tr');
+    nr.className = 'ft-note';
+    nr.innerHTML = `<td colspan="3">▸ ${f.note}</td>`;
+    tbody.appendChild(nr);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP EXPLAIN
+// ═══════════════════════════════════════════════════════
+function showStep(s) {
+  const el = document.getElementById('stepExplain');
+  if (!s) {
+    el.className = 'step-explain empty';
+    el.innerHTML = 'Select a mode above and click Next to begin.';
+    return;
+  }
+  el.className = 'step-explain';
+  el.innerHTML = `
+    <div class="step-lbl ${s.log.type}">${s.log.lbl}</div>
+    <div class="step-msg">${s.log.msg}</div>
+    <div class="step-det">${s.log.det}</div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP ENGINE
+// ═══════════════════════════════════════════════════════
+const REPLAY_INTERVAL = 2600;
+
+function firePackets(s) {
+  if (s.packet && s.from && s.to) {
+    spawnPacket(s.from, s.to, s.packet.color, s.packet.label, 80);
+  }
+}
+
+function stopReplay() {
+  if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
+  replaySpec = null;
+}
+
+function startReplay(s) {
+  stopReplay();
+  if (!s.packet) return;
+  replaySpec = s;
+  firePackets(s);
+  replayTimer = setInterval(() => {
+    packets = [];
+    firePackets(replaySpec);
+  }, REPLAY_INTERVAL);
+}
+
+function applyStep(s) {
+  showStep(s);
+  if (s.hasOwnProperty('frame')) showFrame(s.frame);
+  startReplay(s);
+}
+
+function replayTo(target) {
+  packets = [];
+  showStep(null);
+  showFrame(null);
+  let lastFrameKey = null;
+  for (let i = 0; i <= target; i++) {
+    const s = steps[i];
+    if (s.hasOwnProperty('frame')) lastFrameKey = s.frame;
+  }
+  showStep(steps[target]);
+  showFrame(lastFrameKey);
+}
+
+function nextStep() {
+  if (currentStep >= steps.length - 1) return;
+  currentStep++;
+  applyStep(steps[currentStep]);
+  updateUI();
+}
+
+function prevStep() {
+  if (currentStep < 0) return;
+  currentStep--;
+  if (currentStep < 0) {
+    stopReplay();
+    packets = [];
+    showStep(null);
+    showFrame(null);
+  } else {
+    replayTo(currentStep);
+    startReplay(steps[currentStep]);
+  }
+  updateUI();
+}
+
+function resetAll() {
+  currentStep = -1;
+  stopReplay();
+  packets = [];
+  showStep(null);
+  showFrame(null);
+  updateUI();
+  if (autoTimer) toggleAuto();
+}
+
+function updateUI() {
+  const total = steps.length;
+  const isAtk = mode === 'attack';
+
+  document.getElementById('stepCounter').textContent =
+    currentStep < 0 ? 'Ready - click Next to begin' : `Step ${currentStep + 1} of ${total}`;
+
+  document.getElementById('btnPrev').disabled = currentStep < 0;
+  document.getElementById('btnNext').disabled = currentStep >= total - 1;
+  document.getElementById('btnNext').classList.toggle('atk', isAtk);
+
+  const bar = document.getElementById('stepDots');
+  bar.innerHTML = steps.map((_, i) => {
+    let c = 'dot';
+    if (i < currentStep) c += isAtk ? ' done atk' : ' done';
+    else if (i === currentStep) c += ' current';
+    return `<div class="${c}"></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// MODE + AUTO
+// ═══════════════════════════════════════════════════════
+function setMode(m) {
+  mode = m;
+  steps = m === 'normal' ? normalSteps : attackSteps;
+  nodes.attacker.hidden = m !== 'attack';
+  document.getElementById('btnNormal').className = 'mode-btn' + (m === 'normal' ? ' active' : '');
+  document.getElementById('btnAttack').className = 'mode-btn' + (m === 'attack' ? ' active atk' : '');
+  resetAll();
+}
+
+function toggleAuto() {
+  const btn = document.getElementById('btnAuto');
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    btn.textContent = '▶ Auto Play'; btn.classList.remove('running');
+  } else {
+    btn.textContent = '⏸ Pause'; btn.classList.add('running');
+    autoTimer = setInterval(() => {
+      if (currentStep >= steps.length - 1) { toggleAuto(); return; }
+      nextStep();
+    }, 3000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('resize', resize);
+resize();
+showFrame(null);
+showStep(null);
+loop();
+updateUI();
+</script>
+</body>
+</html>
